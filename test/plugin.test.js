@@ -40,7 +40,7 @@ test("a spoken call becomes one agent turn and a text reply in the voice channel
   fs.mkdirSync(path.join(dir, "state"));
   const w = makeDb(path.join(dir, "state", "openclaw.sqlite"));
   const { api, sent, runs, services } = fakeApi({
-    pluginConfig: { channelIds: [C], names: ["ミナ"], settleMs: 30, pollMs: 100, botUserId: BOT },
+    pluginConfig: { channelIds: [C], names: ["ミナ"], allowUserIds: [U1], settleMs: 30, pollMs: 100, botUserId: BOT },
     stateDir: dir,
   });
   plugin.register(api);
@@ -52,6 +52,7 @@ test("a spoken call becomes one agent turn and a text reply in the voice channel
   assert.equal(runs.length, 1);
   assert.equal(runs[0].sessionKey, `agent:main:voice-wake:${C}`);
   assert.equal(runs[0].deliver, false);
+  assert.equal(runs[0].disableTools, true); // least privilege unless tools: "agent"
   assert.match(runs[0].message, /Alice: ミナ、明日の天気は？/);
   assert.deepEqual(sent.map((s) => [s.id, s.to, s.text, s.cfg.marker]), [["discord", `channel:${C}`, "明日は晴れです", "live"]]);
 });
@@ -77,7 +78,7 @@ test("posts as soon as the run's final text is in its agent events, without wait
   const w = makeDb(path.join(dir, "state", "openclaw.sqlite"));
   const events = { listeners: [], offs: 0 };
   const { api, sent, runs, services } = fakeApi({
-    pluginConfig: { channelIds: [C], names: ["ミナ"], settleMs: 30, pollMs: 50, botUserId: BOT },
+    pluginConfig: { channelIds: [C], names: ["ミナ"], allowUserIds: [U1], settleMs: 30, pollMs: 50, botUserId: BOT },
     stateDir: dir,
     waitMs: 5000,
     events,
@@ -102,4 +103,13 @@ test("posts as soon as the run's final text is in its agent events, without wait
   assert.deepEqual(sent.map((s) => s.text), ["早い返事"]);
   assert.ok(Date.now() - t0 < 2000);
   await services[0].stop();
+});
+
+test("off until it is set who may call", async () => {
+  const { api, services, runs } = fakeApi({ pluginConfig: { channelIds: [C], names: ["ミナ"] }, stateDir: "/nonexistent" });
+  plugin.register(api);
+  const r = await services[0].start({});
+  assert.equal(r, undefined);
+  await services[0].stop();
+  assert.equal(runs.length, 0);
 });
