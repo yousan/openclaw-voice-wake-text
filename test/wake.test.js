@@ -108,3 +108,13 @@ test("postTranscript posts the lines before the reply", async () => {
   await engine.stop();
   assert.deepEqual(posts.map((p) => p[1]), ["**Bob\\***: @​everyone 聞いて\n**Alice**: ミナ、今何時？", "はい、ミナです"]);
 });
+
+test("join and leave notices: header first, transcript flushed before the footer", async () => {
+  const { engine, posts } = setup({ config: { postTranscript: true, transcriptFlushMs: 10_000, sessionHeader: "🎙️ {name} is listening", sessionFooter: "🎙️ bye" } });
+  engine.session({ started: true, channelId: C, guildId: G });
+  engine.push(u(U1, "Alice", "hello"));
+  engine.session({ started: false, channelId: C, guildId: G });
+  engine.session({ started: true, channelId: OTHER, guildId: G });
+  await engine.stop();
+  assert.deepEqual(posts.map((p) => p[1]), ["🎙️ ミナ is listening", "**Alice**: hello", "🎙️ bye"]);
+});

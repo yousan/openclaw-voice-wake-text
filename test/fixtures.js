@@ -45,8 +45,19 @@ export function makeDb(file) {
      VALUES (?, ?, ?, ?, ?, 'discord-voice', ?, 0, 0)`,
   ).run(S, START, `2026-01-02/${S}`, `2026-01-02/${S}`, S, JSON.stringify({ providerId: "discord-voice", accountId: "default", guildId: G, channelId: C, agentId: "main" }));
   let seq = 0;
+  let n = 0;
   return {
     db,
+    /** A new capture of the room starts (another stay). Returns a function that stops it. */
+    startSession(channelId = C) {
+      const id = `transcript-new-${n++}`;
+      const at = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO meeting_transcript_sessions (session_id, started_at, selector, export_key, session_slug, provider_id, source_json, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, 'discord-voice', ?, ?, ?)`,
+      ).run(id, at, id, id, id, JSON.stringify({ providerId: "discord-voice", accountId: "default", guildId: G, channelId, agentId: "main" }), Date.now(), Date.now());
+      return () => db.prepare("UPDATE meeting_transcript_sessions SET stopped_at = ?, updated_at_ms = ? WHERE session_id = ?").run(new Date().toISOString(), Date.now() + 1, id);
+    },
     say(userId, label, text, { channelId = C, final = 1, at = Date.now() } = {}) {
       db.prepare(
         `INSERT INTO meeting_transcript_utterances (session_id, session_started_at, sequence, ended_at, speaker_id, speaker_label, text, final, metadata_json)

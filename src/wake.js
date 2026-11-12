@@ -17,6 +17,8 @@ export const DEFAULTS = {
   postTranscript: false,
   transcriptFlushMs: 5000,
   silentReply: "SKIP_REPLY",
+  sessionHeader: false,
+  sessionFooter: false,
 };
 
 export const DEFAULT_PROMPT = [
@@ -79,6 +81,22 @@ export class WakeEngine {
     this.seen.add(u.key);
     if (this.seen.size > 5000) this.seen = new Set([...this.seen].slice(-2500));
     this.chain = this.chain.then(() => this.handle(u)).catch((e) => this.log.warn(`handling an utterance failed: ${e.message}`));
+    return this.chain;
+  }
+
+  /** A capture in a chosen room started or stopped: post the notice (after any pending transcript). */
+  session(ev) {
+    if (this.stopped || !ev || !this.channelIds.has(String(ev.channelId))) return this.chain;
+    const template = ev.started ? this.c.sessionHeader : this.c.sessionFooter;
+    this.chain = this.chain
+      .then(async () => {
+        const r = this.room(ev);
+        await this.flushTranscript(r);
+        if (!template) return;
+        await this.post(r.channelId, fillNotice(template, ev, this.c));
+        this.log.info(`${ev.started ? "joined" : "left"} ${r.channelId}; notice posted`);
+      })
+      .catch((e) => this.log.warn(`posting the ${ev.started ? "join" : "leave"} notice failed: ${e.message}`));
     return this.chain;
   }
 
@@ -235,6 +253,13 @@ export class WakeEngine {
     await Promise.all([...this.pending]);
     for (const r of this.rooms.values()) await this.flushTranscript(r);
   }
+}
+
+function fillNotice(template, ev, c) {
+  return String(template)
+    .replaceAll("{channelId}", ev.channelId)
+    .replaceAll("{guildId}", ev.guildId || "")
+    .replaceAll("{name}", (c.names || [])[0] || "");
 }
 
 export function buildPrompt(template, lines, trigger, c = DEFAULTS) {

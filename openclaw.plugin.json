@@ -2,7 +2,7 @@
   "id": "voice-wake-text",
   "name": "Voice Wake Text",
   "description": "When someone in a Discord voice channel says the agent's name, the agent answers in text in that voice channel's chat. For listen-only transcript capture: no realtime voice model. Off until configured.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "categories": [
     "voice"
   ],
@@ -67,6 +67,14 @@
     "postTranscript": {
       "label": "Also post the transcript",
       "help": "Post every utterance in the voice channel's chat as well (who said what). Off by default."
+    },
+    "sessionHeader": {
+      "label": "Join notice",
+      "help": "Posted in the voice channel's chat when the agent joins the room to listen (a capture starts). {name} = the first of names. Off by default."
+    },
+    "sessionFooter": {
+      "label": "Leave notice",
+      "help": "Posted when the agent leaves (the capture stops), after the last transcript lines. Off by default."
     }
   },
   "configSchema": {
@@ -172,6 +180,26 @@
       },
       "stateDb": {
         "type": "string"
+      },
+      "sessionHeader": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "const": false
+          }
+        ]
+      },
+      "sessionFooter": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "const": false
+          }
+        ]
       }
     }
   }

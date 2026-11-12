@@ -49,3 +49,21 @@ test("waits for a database that does not exist yet, then follows it", async () =
   assert.equal(got.length, 1);
   f.close();
 });
+
+test("reports captures that start and stop after start-up, not the ones found running", async () => {
+  await sqliteReady;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vwt-store-"));
+  const file = path.join(dir, "openclaw.sqlite");
+  const w = makeDb(file); // one capture already running
+  const events = [];
+  const f = new UtteranceFollower({ file, onUtterance() {}, onSession: (e) => events.push(e) });
+  f.poll();
+  assert.deepEqual(events, []);
+  const stop = w.startSession();
+  f.poll();
+  f.poll();
+  stop();
+  f.poll();
+  assert.deepEqual(events.map((e) => [e.started, e.channelId, e.guildId]), [[true, C, G], [false, C, G]]);
+  f.close();
+});
