@@ -1,0 +1,24 @@
+{
+  "name": "@yousan/openclaw-voice-wake-text",
+  "version": "0.1.0",
+  "description": "When someone in a Discord voice channel says the agent's name, the agent answers in text in that voice channel's chat. For listen-only transcript capture: no realtime voice model. Off until configured.",
+  "type": "module",
+  "license": "MIT",
+  "author": "yousan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yousan/openclaw-voice-wake-text.git"
+  },
+  "keywords": ["openclaw", "openclaw-plugin", "discord", "voice", "wake-word", "transcript", "ai-agents"],
+  "files": ["src", "openclaw", "openclaw.plugin.json", "examples", "README.md", "LICENSE"],
+  "engines": { "node": ">=22.13" },
+  "scripts": { "test": "node --test test/*.test.js" },
+  "peerDependencies": { "openclaw": ">=2026.10.2" },
+  "peerDependenciesMeta": { "openclaw": { "optional": true } },
+  "openclaw": {
+    "extensions": ["./openclaw/index.js"],
+    "compat": { "pluginApi": ">=2026.10.2", "minGatewayVersion": "2026.10.2" },
+    "build": { "openclawVersion": "2026.10.2", "pluginSdkVersion": "2026.10.2" },
+    "install": { "npmSpec": "@yousan/openclaw-voice-wake-text", "minHostVersion": ">=2026.10.2" }
+  }
+}

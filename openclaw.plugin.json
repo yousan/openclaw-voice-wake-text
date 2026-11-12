@@ -1,0 +1,178 @@
+{
+  "id": "voice-wake-text",
+  "name": "Voice Wake Text",
+  "description": "When someone in a Discord voice channel says the agent's name, the agent answers in text in that voice channel's chat. For listen-only transcript capture: no realtime voice model. Off until configured.",
+  "version": "0.1.0",
+  "categories": [
+    "voice"
+  ],
+  "activation": {
+    "onStartup": true
+  },
+  "uiHints": {
+    "channelIds": {
+      "label": "Voice channels",
+      "help": "Answer calls in these voice channels (ids). Off until set."
+    },
+    "names": {
+      "label": "Names to answer to",
+      "help": "What people call the agent, including likely mishearings, e.g. [\"Mina\", \"Nina\"]. Matched anywhere in an utterance, ignoring case, width, spaces and punctuation."
+    },
+    "ignoreWords": {
+      "label": "Words that are not a call",
+      "help": "Removed before matching, e.g. a common word that contains the name.",
+      "advanced": true
+    },
+    "ignoreUserIds": {
+      "label": "People who cannot call",
+      "advanced": true,
+      "help": "User ids whose speech never triggers a reply (bots and the agent itself are always ignored)."
+    },
+    "agentId": {
+      "label": "Agent",
+      "help": "Which agent answers. Default main."
+    },
+    "sessionKey": {
+      "label": "Session",
+      "advanced": true,
+      "help": "Default agent:{agentId}:voice-wake:{channelId}: one session per voice channel."
+    },
+    "contextLines": {
+      "label": "Lines before the call",
+      "help": "How many earlier utterances are sent with the call. Default 12."
+    },
+    "settleMs": {
+      "label": "Wait for quiet (ms)",
+      "help": "After the name, wait until the room is quiet this long, so the rest of the request is included. Default 3000."
+    },
+    "maxWaitMs": {
+      "label": "Wait at most (ms)",
+      "advanced": true,
+      "help": "Default 12000."
+    },
+    "cooldownMs": {
+      "label": "Minimum gap (ms)",
+      "help": "Between two answers in one room; calls in between are answered once afterwards. Default 10000."
+    },
+    "replyTemplate": {
+      "label": "Reply format",
+      "advanced": true,
+      "help": "{reply}, {speaker}, {text}. Default {reply}."
+    },
+    "prompt": {
+      "label": "Prompt",
+      "advanced": true,
+      "help": "What the agent is sent. {lines} = the conversation, {silent} = silentReply."
+    },
+    "postTranscript": {
+      "label": "Also post the transcript",
+      "help": "Post every utterance in the voice channel's chat as well (who said what). Off by default."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "channelIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "names": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "ignoreWords": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "ignoreUserIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "agentId": {
+        "type": "string"
+      },
+      "sessionKey": {
+        "type": "string"
+      },
+      "accountId": {
+        "type": "string"
+      },
+      "botUserId": {
+        "type": "string"
+      },
+      "contextLines": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 200
+      },
+      "contextMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "settleMs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 60000
+      },
+      "maxWaitMs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 120000
+      },
+      "cooldownMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 900000
+      },
+      "pollMs": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 60000
+      },
+      "replyTemplate": {
+        "type": "string"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "extraSystemPrompt": {
+        "type": "string"
+      },
+      "silentReply": {
+        "type": "string"
+      },
+      "maxReplyChars": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1900
+      },
+      "postTranscript": {
+        "type": "boolean"
+      },
+      "transcriptFlushMs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 600000
+      },
+      "timeZone": {
+        "type": "string"
+      },
+      "stateDb": {
+        "type": "string"
+      }
+    }
+  }
+}
