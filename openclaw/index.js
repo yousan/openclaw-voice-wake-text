@@ -73,7 +73,9 @@ export async function startService(api, ctx, { openDb, fetchImpl = fetch } = {})
 
   await sqliteReady;
   const file = config.stateDb || stateDbPath(stateDir(api));
-  const follower = new UtteranceFollower({ file, log, openDb, onUtterance: (u) => engine.push(u) });
+  const follower = new UtteranceFollower({ file, log, openDb, onUtterance: (u) => engine.push(u),
+    onSession: config.sessionHeader || config.sessionFooter ? (ev) => engine.session(ev) : undefined,
+  });
   log.info(`listening for ${config.names.join(" / ")} in ${config.channelIds.join(", ")}`);
   const tick = () => follower.poll();
   tick();

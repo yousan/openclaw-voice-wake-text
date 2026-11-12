@@ -27,6 +27,13 @@ SELECT u.rowid AS rowid, u.session_id AS sessionId, u.sequence AS sequence,
  ORDER BY u.rowid
  LIMIT ?`;
 
+const SESSIONS = `
+SELECT session_id AS sessionId, started_at AS startedAt, stopped_at AS stoppedAt,
+       source_json AS sourceJson, provider_id AS providerId, updated_at_ms AS updatedAtMs
+  FROM meeting_transcript_sessions
+ WHERE updated_at_ms >= ?
+ ORDER BY updated_at_ms`;
+
 /** Turn one database row into an utterance, or null when it is not a usable Discord voice line. */
 export function toUtterance(row) {
   if (!row || row.final === 0) return null;
@@ -61,9 +68,12 @@ export class UtteranceFollower {
    * @param {() => any} [o.openDb]        for tests: returns an object with prepare(sql).all(...args)
    * @param {boolean} [o.fromStart]      read existing rows too (default: only rows added after start)
    */
-  constructor({ file, onUtterance, log, openDb, fromStart = false, batch = 200 }) {
+  constructor({ file, onUtterance, onSession, log, openDb, fromStart = false, batch = 200 }) {
     this.file = file;
     this.onUtterance = onUtterance;
+    this.onSession = onSession; // ({started, guildId, channelId, sessionId}) when a capture starts or stops
+    this.sessions = new Map(); // "<id>|<started_at>" -> active
+    this.sessionCursor = null;
     this.log = log || { info() {}, warn() {} };
     this.openDb = openDb || (() => openReadOnly(file));
     this.cursor = fromStart ? 0 : null; // null: start at the current end on first open
@@ -77,6 +87,7 @@ export class UtteranceFollower {
     try {
       if (!this.db) this.open();
       if (!this.db) return 0;
+      if (this.onSession) this.pollSessions();
       let n = 0;
       for (;;) {
         const rows = this.stmt.all(this.cursor, this.batch);
@@ -96,11 +107,32 @@ export class UtteranceFollower {
     }
   }
 
+  // A capture session is active while stopped_at is empty. Report changes, not
+  // the state found at start (a restart is not a new stay).
+  pollSessions() {
+    const first = this.sessionCursor == null;
+    const rows = this.sessionStmt.all(first ? 0 : this.sessionCursor);
+    for (const row of rows) {
+      this.sessionCursor = Math.max(this.sessionCursor ?? 0, Number(row.updatedAtMs) || 0);
+      const source = parseJson(row.sourceJson);
+      if ((str(row.providerId) || str(source.providerId)) !== "discord-voice") continue;
+      const key = `${row.sessionId}|${row.startedAt}`;
+      const active = !row.stoppedAt;
+      const before = this.sessions.get(key);
+      this.sessions.set(key, active);
+      if (first || before === active || (before === undefined && !active)) continue;
+      this.onSession({ started: active, sessionId: row.sessionId, guildId: str(source.guildId), channelId: str(source.channelId) });
+    }
+    if (first) this.sessionCursor ??= 0;
+    if (this.sessions.size > 500) this.sessions = new Map([...this.sessions].slice(-250));
+  }
+
   open() {
     const db = this.openDb();
     if (!db) return;
     this.db = db;
     this.stmt = db.prepare(QUERY);
+    if (this.onSession) this.sessionStmt = db.prepare(SESSIONS);
     if (this.cursor == null) {
       const row = db.prepare("SELECT COALESCE(MAX(rowid), 0) AS m FROM meeting_transcript_utterances").get();
       this.cursor = Number(row?.m ?? 0);
@@ -120,6 +152,7 @@ export class UtteranceFollower {
     } catch {}
     this.db = null;
     this.stmt = null;
+    this.sessionStmt = null;
   }
 }
 

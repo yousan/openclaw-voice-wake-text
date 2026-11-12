@@ -111,6 +111,8 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 | `replyTemplate` | `{reply}` | Posted text; `{speaker}` and `{text}` = who called and what they said |
 | `maxReplyChars` | `1900` | Longer replies are cut |
 | `postTranscript` | `false` | Also post every utterance in the chat |
+| `sessionHeader` | `false` | Posted in the chat when the agent joins to listen (a capture starts), before anything else; `{name}` = first of `names`, `{channelId}`, `{guildId}` |
+| `sessionFooter` | `false` | Posted when the agent leaves (the capture stops), after the last transcript lines |
 | `transcriptFlushMs` | `5000` | Collect transcript lines this long per message |
 | `timeZone` | host | Time zone of the times in the prompt |
 | `accountId` | default | Which configured Discord account posts and looks up members |
@@ -122,7 +124,7 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 - **It reads the Gateway's state database, not an API.** OpenClaw 2026.10.2 exposes no plugin hook for saved transcript utterances, so this reads `meeting_transcript_utterances` read-only. The table shape is pinned by tests against 2026.10.2; a Gateway update can change it.
 - **Use `whenOccupied: true`.** In OpenClaw 2026.10.2 (also seen in the 2026.10.6 Discord plugin code), a capture started outside Discord's own event handling — a continuous `transcripts.autoStart` entry without `whenOccupied` — fails to join with `Discord runtime not initialized` (the Gateway only logs `start-failed`). Occupancy-driven starts come from Discord's voice events and are not affected. For the same reason, a room that is already occupied when the Gateway starts may not be joined until someone joins or leaves.
 - **Delay.** Batch transcription happens after someone stops talking, then `settleMs`, then the agent's turn: expect several seconds to a few tens of seconds.
-- **Recognition errors.** A misheard name is a missed call; add the variant to `names`. A word that sounds like the name is a false call; the agent can answer `SKIP_REPLY`, or add the word to `ignoreWords`.
+- **Recognition errors.** A misheard name is a missed call; add the variant to `names`. Short names suffer most: with a Japanese sherpa-onnx model (NeMo parakeet-tdt_ctc 0.6b ja), a bare 「ミナ」 came out as 「みんな」/「皆」 almost every time, while 「ミナちゃん」 survived (as みなちゃん / ミナちゃん). Ask people to use a distinctive form of the name, and list the spellings the model produces. A word that sounds like the name is a false call; the agent can answer `SKIP_REPLY`, or add the word to `ignoreWords`.
 - **Meeting notes still run.** Transcript capture also writes meeting notes with the agent's utility model about every five minutes while people talk (OpenClaw behaviour, not this plugin).
 - **Restarts.** After a Gateway restart it starts from new utterances; calls made while it was down are not answered.
 
