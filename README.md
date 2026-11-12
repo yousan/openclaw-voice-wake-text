@@ -46,12 +46,11 @@ voice channel ──audio──▶ OpenClaw transcript capture (listen-only, bat
 
 ## Install
 
-From a clone (this plugin is not published to ClawHub or npm):
-
 ```sh
-git clone https://github.com/yousan/openclaw-voice-wake-text
-openclaw plugins install --link ./openclaw-voice-wake-text
+openclaw plugins install clawhub:@yousan/openclaw-voice-wake-text
 ```
+
+From a clone instead: `openclaw plugins install --link /path/to/openclaw-voice-wake-text`.
 
 Then make the room listen-only and choose the names:
 
