@@ -95,6 +95,7 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 |---|---|---|
 | `channelIds` | none | Voice channels to answer in. **Off until set** |
 | `names` | none | What people call the agent, with likely mishearings. **Off until set** |
+| `leadingCall` | off | `{ enabled, patterns, fillers }`: regular expressions tested **only at the start** of an utterance (after fillers such as ねえ / おーい), for a name the recognizer keeps getting wrong. E.g. `"^.{1,2}[なナ]ちゃん"` takes りなちゃん / ひなちゃん / いいなちゃん at the start as a call for ミナちゃん, but not 「昨日ひなちゃんと…」 |
 | `ignoreWords` | `[]` | Removed before matching (e.g. `"みなさん"` when a name is `"みな"`) |
 | `ignoreUserIds` | `[]` | Speakers whose calls are ignored (bots and the agent are always ignored) |
 | `agentId` | `main` | The agent that answers |
@@ -104,6 +105,7 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 | `settleMs` | `3000` | Wait until the room has been quiet this long after a call |
 | `maxWaitMs` | `12000` | Never wait longer than this after a call |
 | `cooldownMs` | `10000` | Minimum time between two answers in one room |
+| `earlyReply` | `true` | Post as soon as the run's final text appears in its agent events. After a plugin's run ends, OpenClaw 2026.10.2 runs `subagent_ended` hooks before `waitForRun` returns, which took about 20 s on a busy Gateway; `false` waits for `waitForRun` |
 | `timeoutMs` | `180000` | Give up waiting for the agent after this |
 | `prompt` | see `src/wake.js` | Message sent to the agent; `{lines}` = conversation, `{silent}` = `silentReply` |
 | `extraSystemPrompt` | none | Extra system prompt for the turn |
@@ -123,7 +125,7 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 
 - **It reads the Gateway's state database, not an API.** OpenClaw 2026.10.2 exposes no plugin hook for saved transcript utterances, so this reads `meeting_transcript_utterances` read-only. The table shape is pinned by tests against 2026.10.2; a Gateway update can change it.
 - **Use `whenOccupied: true`.** In OpenClaw 2026.10.2 (also seen in the 2026.10.6 Discord plugin code), a capture started outside Discord's own event handling — a continuous `transcripts.autoStart` entry without `whenOccupied` — fails to join with `Discord runtime not initialized` (the Gateway only logs `start-failed`). Occupancy-driven starts come from Discord's voice events and are not affected. For the same reason, a room that is already occupied when the Gateway starts may not be joined until someone joins or leaves.
-- **Delay.** Batch transcription happens after someone stops talking, then `settleMs`, then the agent's turn: expect several seconds to a few tens of seconds.
+- **Delay.** Batch transcription happens after someone stops talking (about 10 s in our setup), then `settleMs`, then the agent's turn: expect roughly 20–30 s from the end of speech to the reply.
 - **Recognition errors.** A misheard name is a missed call; add the variant to `names`. Short names suffer most: with a Japanese sherpa-onnx model (NeMo parakeet-tdt_ctc 0.6b ja), a bare 「ミナ」 came out as 「みんな」/「皆」 almost every time, while 「ミナちゃん」 survived (as みなちゃん / ミナちゃん). Ask people to use a distinctive form of the name, and list the spellings the model produces. A word that sounds like the name is a false call; the agent can answer `SKIP_REPLY`, or add the word to `ignoreWords`.
 - **Meeting notes still run.** Transcript capture also writes meeting notes with the agent's utility model about every five minutes while people talk (OpenClaw behaviour, not this plugin).
 - **Restarts.** After a Gateway restart it starts from new utterances; calls made while it was down are not answered.
