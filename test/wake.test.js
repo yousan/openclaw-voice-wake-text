@@ -54,8 +54,8 @@ test("no reply without the name, from bots, or in other rooms", async () => {
   assert.equal(posts.length, 0);
 });
 
-test("NO_REPLY and empty answers post nothing", async () => {
-  for (const reply of ["NO_REPLY", "", null]) {
+test("SKIP_REPLY and empty answers post nothing", async () => {
+  for (const reply of ["SKIP_REPLY", "", null]) {
     const { engine, posts } = setup({ reply });
     engine.push(u(U1, "Alice", "ミナがさ、昨日"));
     await sleep(100);

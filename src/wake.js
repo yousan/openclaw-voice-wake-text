@@ -16,7 +16,7 @@ export const DEFAULTS = {
   maxReplyChars: 1900,
   postTranscript: false,
   transcriptFlushMs: 5000,
-  silentReply: "NO_REPLY",
+  silentReply: "SKIP_REPLY",
 };
 
 export const DEFAULT_PROMPT = [
@@ -241,7 +241,7 @@ export function buildPrompt(template, lines, trigger, c = DEFAULTS) {
   const body = lines
     .map((l) => `${l.key === trigger.key ? "▶ " : "  "}[${clock(l.at, c.timeZone)}] ${l.speaker}: ${l.text}`)
     .join("\n");
-  return template.replaceAll("{lines}", body).replaceAll("{silent}", c.silentReply || "NO_REPLY");
+  return template.replaceAll("{lines}", body).replaceAll("{silent}", c.silentReply || "SKIP_REPLY");
 }
 
 function cleanReply(reply, c) {

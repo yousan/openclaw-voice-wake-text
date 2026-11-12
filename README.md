@@ -38,7 +38,7 @@ voice channel ──audio──▶ OpenClaw transcript capture (listen-only, bat
 
 - **Calls.** An utterance calls the agent when it contains one of `names`, ignoring case, full/half width, spaces and punctuation. Speech recognition mishears names, so list the variants you see (`"Mina"`, `"Nina"`, `"ミナ"`, `"みな"`). `ignoreWords` are removed before matching, for ordinary words that contain the name.
 - **The rest of the request.** People often say the name, pause, then ask. After a call it waits until nobody has said anything for `settleMs` (at most `maxWaitMs`), and includes what was said in between.
-- **Context.** The agent gets the `contextLines` utterances before the call (within `contextMs`), the call (marked `▶`) and what followed, with names and times, and is told it is listening silently and its reply is posted as text. It may answer `NO_REPLY` when the name only came up in passing; nothing is posted then.
+- **Context.** The agent gets the `contextLines` utterances before the call (within `contextMs`), the call (marked `▶`) and what followed, with names and times, and is told it is listening silently and its reply is posted as text. It may answer `SKIP_REPLY` when the name only came up in passing; nothing is posted then.
 - **One answer per call.** Each saved utterance is handled once. Calls made while the agent is answering, or within `cooldownMs` after, are collapsed into one more answer for the latest call (skipped if the previous answer already saw it).
 - **Who can call.** Not the agent itself, not other bots (Discord member lookup), not `ignoreUserIds`. Who may talk to the agent in text is unchanged: `@agent` in the chat works as before.
 - **Session.** By default each voice channel has its own agent session, `agent:<agentId>:voice-wake:<channelId>`, so it remembers earlier calls in that room. The run uses the agent's normal model, tools and memory.
@@ -107,7 +107,7 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 | `timeoutMs` | `180000` | Give up waiting for the agent after this |
 | `prompt` | see `src/wake.js` | Message sent to the agent; `{lines}` = conversation, `{silent}` = `silentReply` |
 | `extraSystemPrompt` | none | Extra system prompt for the turn |
-| `silentReply` | `NO_REPLY` | Reply meaning "say nothing" |
+| `silentReply` | `SKIP_REPLY` | Reply meaning "say nothing". Not OpenClaw's own `NO_REPLY`: some agent backends (the Claude CLI backend in 2026.10.2) treat a bare `NO_REPLY` as an empty response and retry with a fallback model |
 | `replyTemplate` | `{reply}` | Posted text; `{speaker}` and `{text}` = who called and what they said |
 | `maxReplyChars` | `1900` | Longer replies are cut |
 | `postTranscript` | `false` | Also post every utterance in the chat |
@@ -120,8 +120,9 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 ## Limitations
 
 - **It reads the Gateway's state database, not an API.** OpenClaw 2026.10.2 exposes no plugin hook for saved transcript utterances, so this reads `meeting_transcript_utterances` read-only. The table shape is pinned by tests against 2026.10.2; a Gateway update can change it.
+- **Use `whenOccupied: true`.** In OpenClaw 2026.10.2 (also seen in the 2026.10.6 Discord plugin code), a capture started outside Discord's own event handling — a continuous `transcripts.autoStart` entry without `whenOccupied` — fails to join with `Discord runtime not initialized` (the Gateway only logs `start-failed`). Occupancy-driven starts come from Discord's voice events and are not affected. For the same reason, a room that is already occupied when the Gateway starts may not be joined until someone joins or leaves.
 - **Delay.** Batch transcription happens after someone stops talking, then `settleMs`, then the agent's turn: expect several seconds to a few tens of seconds.
-- **Recognition errors.** A misheard name is a missed call; add the variant to `names`. A word that sounds like the name is a false call; the agent can answer `NO_REPLY`, or add the word to `ignoreWords`.
+- **Recognition errors.** A misheard name is a missed call; add the variant to `names`. A word that sounds like the name is a false call; the agent can answer `SKIP_REPLY`, or add the word to `ignoreWords`.
 - **Meeting notes still run.** Transcript capture also writes meeting notes with the agent's utility model about every five minutes while people talk (OpenClaw behaviour, not this plugin).
 - **Restarts.** After a Gateway restart it starts from new utterances; calls made while it was down are not answered.
 
