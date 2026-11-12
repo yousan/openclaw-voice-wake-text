@@ -2,7 +2,7 @@
   "id": "voice-wake-text",
   "name": "Voice Wake Text",
   "description": "When someone in a Discord voice channel says the agent's name, the agent answers in text in that voice channel's chat. For listen-only transcript capture: no realtime voice model. Off until configured.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "categories": [
     "voice"
   ],
@@ -85,6 +85,11 @@
       "label": "Post as soon as the reply is ready",
       "advanced": true,
       "help": "Take the reply from the run's agent events instead of waiting for the run to be fully finished. Default on."
+    },
+    "postVia": {
+      "label": "How to post",
+      "advanced": true,
+      "help": "worker (default when channels.discord.token is a plain string): Discord REST from a worker thread, so a busy Gateway does not delay the reply. adapter: the Gateway's Discord outbound adapter."
     }
   },
   "configSchema": {
@@ -234,6 +239,12 @@
       },
       "earlyReply": {
         "type": "boolean"
+      },
+      "postVia": {
+        "enum": [
+          "worker",
+          "adapter"
+        ]
       }
     }
   }
