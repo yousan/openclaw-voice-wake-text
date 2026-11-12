@@ -106,6 +106,7 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 | `maxWaitMs` | `12000` | Never wait longer than this after a call |
 | `cooldownMs` | `10000` | Minimum time between two answers in one room |
 | `earlyReply` | `true` | Post as soon as the run's final text appears in its agent events. After a plugin's run ends, OpenClaw 2026.10.2 runs `subagent_ended` hooks before `waitForRun` returns, which took about 20 s on a busy Gateway; `false` waits for `waitForRun` |
+| `postVia` | `worker` | `worker`: Discord REST from a worker thread, with the token in `channels.discord.token` (a plain string). After a plugin's run, OpenClaw 2026.10.2 reloads every plugin for `subagent_ended` hooks on the main thread; on our Gateway that blocked its event loop for 25–40 s, so a reply sent from the main thread waited that long. `adapter`: the Gateway's Discord outbound adapter (used anyway when the token is not a plain string) |
 | `timeoutMs` | `180000` | Give up waiting for the agent after this |
 | `prompt` | see `src/wake.js` | Message sent to the agent; `{lines}` = conversation, `{silent}` = `silentReply` |
 | `extraSystemPrompt` | none | Extra system prompt for the turn |
@@ -128,6 +129,7 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 - **Delay.** Batch transcription happens after someone stops talking (about 10 s in our setup), then `settleMs`, then the agent's turn: expect roughly 20–30 s from the end of speech to the reply.
 - **Recognition errors.** A misheard name is a missed call; add the variant to `names`. Short names suffer most: with a Japanese sherpa-onnx model (NeMo parakeet-tdt_ctc 0.6b ja), a bare 「ミナ」 came out as 「みんな」/「皆」 almost every time, while 「ミナちゃん」 survived (as みなちゃん / ミナちゃん). Ask people to use a distinctive form of the name, and list the spellings the model produces. A word that sounds like the name is a false call; the agent can answer `SKIP_REPLY`, or add the word to `ignoreWords`.
 - **Meeting notes still run.** Transcript capture also writes meeting notes with the agent's utility model about every five minutes while people talk (OpenClaw behaviour, not this plugin).
+- **Each answer makes the Gateway reload its plugins.** That is OpenClaw 2026.10.2 behaviour for plugin subagent runs (`subagent_ended` hooks), not something this plugin does on purpose; the Gateway is busy for that time (25–40 s on our host with 12 plugins). The reply itself is not delayed (`earlyReply`, `postVia: worker`).
 - **Restarts.** After a Gateway restart it starts from new utterances; calls made while it was down are not answered.
 
 ## Development

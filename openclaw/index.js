@@ -12,6 +12,7 @@ import path from "node:path";
 import { UtteranceFollower, stateDbPath, sqliteReady } from "../src/store.js";
 import { WakeEngine, DEFAULTS } from "../src/wake.js";
 import { botCheck, botUserId } from "../src/discord.js";
+import { workerPoster } from "../src/rest-worker.js";
 
 export const PLUGIN_ID = "voice-wake-text";
 
@@ -57,6 +58,7 @@ export async function startService(api, ctx, { openDb, fetchImpl = fetch } = {})
   let selfId = config.botUserId;
   if (!selfId && token) selfId = await botUserId(token, fetchImpl).catch((e) => (log.warn(`could not read the bot's own id: ${e.message}`), undefined));
   const isBot = token ? botCheck({ token, fetchImpl }) : null;
+  const poster = createPoster(api, ctx, config, token);
 
   const engine = new WakeEngine({
     config,
@@ -68,7 +70,7 @@ export async function startService(api, ctx, { openDb, fetchImpl = fetch } = {})
       return (await isBot(u.guildId, u.userId)) !== true;
     },
     ask: (req) => askAgent(api, config, req, log),
-    post: createPoster(api, ctx, config),
+    post: poster.post,
   });
 
   await sqliteReady;
@@ -88,6 +90,7 @@ export async function startService(api, ctx, { openDb, fetchImpl = fetch } = {})
       clearInterval(timer);
       follower.close();
       await engine.stop();
+      await poster.close();
     },
   };
 }
@@ -100,36 +103,43 @@ export async function askAgent(api, config, { channelId, prompt, trigger }, log)
     .replaceAll("{agentId}", config.agentId)
     .replaceAll("{channelId}", channelId);
   const early = config.earlyReply === false ? null : watchRunText(api);
-  const { runId, sessionKey: accepted } = await sub.run({
-    sessionKey,
-    message: prompt,
-    deliver: false,
-    idempotencyKey: `${PLUGIN_ID}:${trigger.key}`,
-    ...(config.extraSystemPrompt ? { extraSystemPrompt: config.extraSystemPrompt } : {}),
-  });
-  // The final text is usually known well before waitForRun returns (the Gateway
-  // runs subagent_ended hooks first, which can take tens of seconds), so take it
-  // from the run's agent events and fall back to waitForRun.
-  early?.watch(runId);
-  const waited = sub.waitForRun({ runId, timeoutMs: config.timeoutMs }).then((r) => ({ waited: r }));
-  const first = await Promise.race([waited, ...(early ? [early.promise.then((text) => ({ text }))] : [])]).finally(() => early?.off());
-  if ("text" in first) return first.text;
-  const result = first.waited;
-  if (result.status !== "ok") {
-    log.warn(`agent turn ${runId} ended: ${result.status}${result.error ? ` (${result.error})` : ""}`);
+  try {
+    const { runId, sessionKey: accepted } = await sub.run({
+      sessionKey,
+      message: prompt,
+      deliver: false,
+      idempotencyKey: `${PLUGIN_ID}:${trigger.key}`,
+      ...(config.extraSystemPrompt ? { extraSystemPrompt: config.extraSystemPrompt } : {}),
+    });
+    // The final text is usually known well before waitForRun returns (the Gateway
+    // runs subagent_ended hooks first, which can take tens of seconds), so take it
+    // from the run's agent events and fall back to waitForRun.
+    early?.watch(runId);
+    const waited = sub.waitForRun({ runId, timeoutMs: config.timeoutMs }).then(
+      (r) => ({ waited: r }),
+      (e) => ({ waited: { status: "error", error: e?.message || String(e) } }),
+    );
+    const first = await Promise.race([waited, ...(early ? [early.promise.then((text) => ({ text }))] : [])]);
+    if ("text" in first) return first.text;
+    const result = first.waited;
+    if (result.status !== "ok") {
+      log.warn(`agent turn ${runId} ended: ${result.status}${result.error ? ` (${result.error})` : ""}`);
+      return null;
+    }
+    const t = result.terminalReply;
+    if (t?.disposition === "visible") return t.text;
+    if (t?.disposition === "silent") return null;
+    // Older or custom runtimes: read the last assistant message of the session.
+    const { messages = [] } = (await sub.getSessionMessages?.({ sessionKey: accepted || sessionKey, limit: 5 })) || {};
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m?.role !== "assistant") continue;
+      return textOf(m.content);
+    }
     return null;
+  } finally {
+    early?.off(); // also when run() or waitForRun() throws
   }
-  const t = result.terminalReply;
-  if (t?.disposition === "visible") return t.text;
-  if (t?.disposition === "silent") return null;
-  // Older or custom runtimes: read the last assistant message of the session.
-  const { messages = [] } = (await sub.getSessionMessages?.({ sessionKey: accepted || sessionKey, limit: 5 })) || {};
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.role !== "assistant") continue;
-    return textOf(m.content);
-  }
-  return null;
 }
 
 /**
@@ -185,8 +195,21 @@ function textOf(content) {
   return null;
 }
 
-/** Post through the Gateway's own Discord account, into the voice channel's chat. */
-export function createPoster(api, ctx, config) {
+/**
+ * Post as the Gateway's own Discord account, into the voice channel's chat.
+ * With a plain bot token (and postVia not "adapter"): Discord REST from a worker
+ * thread, so a busy Gateway main thread does not hold the reply back. Otherwise
+ * the Gateway's Discord outbound adapter.
+ */
+export function createPoster(api, ctx, config, token) {
+  if (token && config.postVia !== "adapter") {
+    const w = workerPoster({ token });
+    return { post: (channelId, text) => w.post(channelId, text), close: () => w.close() };
+  }
+  return { post: adapterPoster(api, ctx, config), close: async () => {} };
+}
+
+function adapterPoster(api, ctx, config) {
   let adapter;
   return async function post(channelId, text) {
     adapter ??= await api.runtime.channel.outbound.loadAdapter("discord");
