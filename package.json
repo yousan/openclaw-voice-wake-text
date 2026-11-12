@@ -1,6 +1,6 @@
 {
   "name": "@yousan/openclaw-voice-wake-text",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "When someone in a Discord voice channel says the agent's name, the agent answers in text in that voice channel's chat. For listen-only transcript capture: no realtime voice model. Off until configured.",
   "type": "module",
   "license": "MIT",

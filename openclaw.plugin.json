@@ -2,7 +2,7 @@
   "id": "voice-wake-text",
   "name": "Voice Wake Text",
   "description": "When someone in a Discord voice channel says the agent's name, the agent answers in text in that voice channel's chat. For listen-only transcript capture: no realtime voice model. Off until configured.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "categories": [
     "voice"
   ],
@@ -75,6 +75,16 @@
     "sessionFooter": {
       "label": "Leave notice",
       "help": "Posted when the agent leaves (the capture stops), after the last transcript lines. Off by default."
+    },
+    "leadingCall": {
+      "label": "Loose call at the start",
+      "advanced": true,
+      "help": "{ enabled, patterns, fillers }. Regular expressions tested only at the start of an utterance (after fillers such as ねえ), for names the recognizer keeps getting wrong, e.g. \"^.{1,2}[なナ]ちゃん\" for ミナちゃん heard as りなちゃん. Off by default."
+    },
+    "earlyReply": {
+      "label": "Post as soon as the reply is ready",
+      "advanced": true,
+      "help": "Take the reply from the run's agent events instead of waiting for the run to be fully finished. Default on."
     }
   },
   "configSchema": {
@@ -200,6 +210,30 @@
             "const": false
           }
         ]
+      },
+      "leadingCall": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fillers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "earlyReply": {
+        "type": "boolean"
       }
     }
   }

@@ -19,7 +19,13 @@ export const DEFAULTS = {
   silentReply: "SKIP_REPLY",
   sessionHeader: false,
   sessionFooter: false,
+  // Opt-in loose match for names the speech recognizer keeps getting wrong:
+  // a regular expression tested only at the start of an utterance (after optional
+  // fillers such as "ねえ"), on the normalized text. Mid-sentence matches never count.
+  leadingCall: { enabled: false, patterns: [], fillers: [] },
 };
+
+export const LEADING_FILLERS = ["ねえ", "ねぇ", "ねー", "おーい", "おい", "あの", "あのさ", "えっと", "ちょっと"];
 
 export const DEFAULT_PROMPT = [
   "You are listening silently in a Discord voice channel: you cannot speak there, and your reply will be posted as text in that voice channel's chat.",
@@ -44,6 +50,19 @@ export function callsName(text, names, ignoreWords = []) {
   let t = normalize(text);
   for (const w of ignoreWords.map(normalize).filter(Boolean).sort((a, b) => b.length - a.length)) t = t.split(w).join(" ");
   return names.map(normalize).some((n) => n && t.includes(n));
+}
+
+/** Does the utterance start with a call that matches one of `patterns` (after fillers)? */
+export function leadingCall(text, { patterns = [], fillers = LEADING_FILLERS } = {}) {
+  const res = patterns.map((p) => (p instanceof RegExp ? p : new RegExp(p, "u")));
+  if (!res.length) return false;
+  let t = normalize(text);
+  const fs = fillers.map(normalize).filter(Boolean).sort((a, b) => b.length - a.length);
+  for (let stripped = true; stripped; ) {
+    stripped = false;
+    for (const f of fs) if (t.startsWith(f)) (t = t.slice(f.length)), (stripped = true);
+  }
+  return res.some((re) => (re.source.startsWith("^") ? re : new RegExp("^(?:" + re.source + ")", re.flags)).test(t));
 }
 
 export class WakeEngine {
@@ -84,6 +103,12 @@ export class WakeEngine {
     return this.chain;
   }
 
+  isCall(text) {
+    if (callsName(text, this.c.names, this.c.ignoreWords)) return true;
+    const lc = this.c.leadingCall;
+    return !!(lc?.enabled && leadingCall(text, { patterns: lc.patterns || [], fillers: lc.fillers?.length ? lc.fillers : LEADING_FILLERS }));
+  }
+
   /** A capture in a chosen room started or stopped: post the notice (after any pending transcript). */
   session(ev) {
     if (this.stopped || !ev || !this.channelIds.has(String(ev.channelId))) return this.chain;
@@ -118,7 +143,7 @@ export class WakeEngine {
     if (this.c.postTranscript) this.queueTranscript(r, u);
 
     if (r.collecting) this.extend(r);
-    if (!callsName(u.text, this.c.names, this.c.ignoreWords)) return;
+    if (!this.isCall(u.text)) return;
     if (this.ignoreUserIds.has(String(u.userId)) || !(await this.isPerson(u))) {
       this.log.info(`name heard from ${u.userId || "?"} (not a person, ignored)`);
       return;
@@ -273,7 +298,8 @@ function cleanReply(reply, c) {
   if (typeof reply !== "string") return null;
   const t = reply.trim();
   if (!t) return null;
-  if (c.silentReply && t.replace(/[.。\s]/g, "") === c.silentReply) return null;
+  const bare = t.replace(/[.。\s]/g, "");
+  if ((c.silentReply && bare === c.silentReply) || bare === "NO_REPLY") return null;
   return defuse(clip(t, c.maxReplyChars));
 }
 

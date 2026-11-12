@@ -99,6 +99,7 @@ export async function askAgent(api, config, { channelId, prompt, trigger }, log)
   const sessionKey = (config.sessionKey || "agent:{agentId}:voice-wake:{channelId}")
     .replaceAll("{agentId}", config.agentId)
     .replaceAll("{channelId}", channelId);
+  const early = config.earlyReply === false ? null : watchRunText(api);
   const { runId, sessionKey: accepted } = await sub.run({
     sessionKey,
     message: prompt,
@@ -106,7 +107,14 @@ export async function askAgent(api, config, { channelId, prompt, trigger }, log)
     idempotencyKey: `${PLUGIN_ID}:${trigger.key}`,
     ...(config.extraSystemPrompt ? { extraSystemPrompt: config.extraSystemPrompt } : {}),
   });
-  const result = await sub.waitForRun({ runId, timeoutMs: config.timeoutMs });
+  // The final text is usually known well before waitForRun returns (the Gateway
+  // runs subagent_ended hooks first, which can take tens of seconds), so take it
+  // from the run's agent events and fall back to waitForRun.
+  early?.watch(runId);
+  const waited = sub.waitForRun({ runId, timeoutMs: config.timeoutMs }).then((r) => ({ waited: r }));
+  const first = await Promise.race([waited, ...(early ? [early.promise.then((text) => ({ text }))] : [])]).finally(() => early?.off());
+  if ("text" in first) return first.text;
+  const result = first.waited;
   if (result.status !== "ok") {
     log.warn(`agent turn ${runId} ended: ${result.status}${result.error ? ` (${result.error})` : ""}`);
     return null;
@@ -122,6 +130,53 @@ export async function askAgent(api, config, { channelId, prompt, trigger }, log)
     return textOf(m.content);
   }
   return null;
+}
+
+/**
+ * Follow agent events and resolve with the last assistant text of one run when
+ * its lifecycle ends with text. Events can arrive before run() returns the id, so
+ * they are kept per run until watch(runId) is called. Never resolves otherwise.
+ */
+export function watchRunText(api) {
+  const on = api.runtime?.events?.onAgentEvent;
+  if (typeof on !== "function") return null;
+  const runs = new Map(); // runId -> { text, ended }
+  let target = null;
+  let resolve;
+  const promise = new Promise((r) => (resolve = r));
+  const settle = (id) => {
+    const r = runs.get(id);
+    // An attempt that ended without text (e.g. before a model fallback) is left to waitForRun.
+    if (id === target && r?.ended && r.text?.trim()) resolve(r.text);
+  };
+  let off = () => {};
+  try {
+    off = on((e) => {
+      if (!e?.runId || (target && e.runId !== target)) return;
+      let r = runs.get(e.runId);
+      if (!r) {
+        if (runs.size > 20) return;
+        runs.set(e.runId, (r = { text: null, ended: false }));
+      }
+      if (e.stream === "assistant" && typeof e.data?.text === "string") r.text = e.data.text;
+      if (e.stream === "lifecycle" && e.data?.phase === "end") r.ended = true, settle(e.runId);
+    });
+  } catch {
+    return null;
+  }
+  return {
+    promise,
+    watch(id) {
+      target = id;
+      for (const k of runs.keys()) if (k !== id) runs.delete(k);
+      settle(id);
+    },
+    off: () => {
+      try {
+        off();
+      } catch {}
+    },
+  };
 }
 
 function textOf(content) {

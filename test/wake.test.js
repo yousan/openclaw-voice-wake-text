@@ -118,3 +118,20 @@ test("join and leave notices: header first, transcript flushed before the footer
   await engine.stop();
   assert.deepEqual(posts.map((p) => p[1]), ["🎙️ ミナ is listening", "**Alice**: hello", "🎙️ bye"]);
 });
+
+test("leadingCall: a loose pattern counts only at the start of an utterance", async () => {
+  const lc = { enabled: true, patterns: ["^.{1,2}[なナ]ちゃん"] };
+  const { engine, asks } = setup({ config: { names: ["ミナちゃん"], leadingCall: lc } });
+  for (const t of ["りなちゃん、聞こえる？", "ねえ、ひなちゃん聞こえる", "いいなちゃん会話聞こえますか", "昨日ひなちゃんと会った", "ワンちゃんかわいい", "ひなちゃん"]) {
+    engine.push(u(U1, "Alice", t));
+    await sleep(60);
+  }
+  await engine.stop();
+  assert.deepEqual(asks.map((a) => a.trigger.text), ["りなちゃん、聞こえる？", "ねえ、ひなちゃん聞こえる", "いいなちゃん会話聞こえますか", "ひなちゃん"]);
+});
+
+test("leadingCall is off unless enabled", () => {
+  const { engine } = setup({ config: { names: ["ミナちゃん"], leadingCall: { enabled: false, patterns: ["^.{1,2}なちゃん"] } } });
+  assert.equal(engine.isCall("りなちゃん聞こえる？"), false);
+  assert.equal(engine.isCall("ミナちゃん聞こえる？"), true);
+});
