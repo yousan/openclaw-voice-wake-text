@@ -2,7 +2,7 @@
   "id": "voice-wake-text",
   "name": "Voice Wake Text",
   "description": "When someone in a Discord voice channel says the agent's name, the agent answers in text in that voice channel's chat. For listen-only transcript capture: no realtime voice model. Off until configured.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "categories": [
     "voice"
   ],
@@ -90,6 +90,28 @@
       "label": "How to post",
       "advanced": true,
       "help": "worker (default when channels.discord.token is a plain string): Discord REST from a worker thread, so a busy Gateway does not delay the reply. adapter: the Gateway's Discord outbound adapter."
+    },
+    "allowUserIds": {
+      "label": "Who may call (users)",
+      "help": "Discord user ids allowed to call the agent by voice. Off until this, allowRoleIds or allowEveryone is set."
+    },
+    "allowRoleIds": {
+      "label": "Who may call (roles)",
+      "help": "Discord role ids; members with one of them may call. Checked with a member lookup; a failed lookup means not allowed."
+    },
+    "allowEveryone": {
+      "label": "Anyone may call",
+      "advanced": true,
+      "help": "Every person in the room may call (bots never). Off by default."
+    },
+    "contextFrom": {
+      "label": "Whose speech is sent",
+      "advanced": true,
+      "help": "allowed (default): only lines from people who may call go to the agent. everyone: every person heard (never bots or ignored users), as untrusted context."
+    },
+    "tools": {
+      "label": "Agent tools",
+      "help": "none (default): the turn runs with no tools. agent: the agent's normal tools; only for rooms where everyone allowed to call may use them."
     }
   },
   "configSchema": {
@@ -244,6 +266,33 @@
         "enum": [
           "worker",
           "adapter"
+        ]
+      },
+      "allowUserIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "allowRoleIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "allowEveryone": {
+        "type": "boolean"
+      },
+      "contextFrom": {
+        "enum": [
+          "allowed",
+          "everyone"
+        ]
+      },
+      "tools": {
+        "enum": [
+          "none",
+          "agent"
         ]
       }
     }

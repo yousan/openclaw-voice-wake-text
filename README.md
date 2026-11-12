@@ -12,7 +12,7 @@ Saturday in Tokyo looks sunny, 18 °C, with a light wind from the north.
 ```
 
 > [!WARNING]
-> **This sends what people say in the room to your agent's model when its name is called**, and can post everything said in the room as text (`postTranscript`). It is **off until you choose rooms** (`channelIds`) **and names** (`names`). Tell participants before they speak.
+> **This sends what people say in the room to your agent's model when its name is called**, and can post everything said in the room as text (`postTranscript`). It is **off until you choose rooms** (`channelIds`), **names** (`names`) **and who may call** (`allowUserIds` / `allowRoleIds`). Tell participants before they speak.
 
 ## Why
 
@@ -40,7 +40,9 @@ voice channel ──audio──▶ OpenClaw transcript capture (listen-only, bat
 - **The rest of the request.** People often say the name, pause, then ask. After a call it waits until nobody has said anything for `settleMs` (at most `maxWaitMs`), and includes what was said in between.
 - **Context.** The agent gets the `contextLines` utterances before the call (within `contextMs`), the call (marked `▶`) and what followed, with names and times, and is told it is listening silently and its reply is posted as text. It may answer `SKIP_REPLY` when the name only came up in passing; nothing is posted then.
 - **One answer per call.** Each saved utterance is handled once. Calls made while the agent is answering, or within `cooldownMs` after, are collapsed into one more answer for the latest call (skipped if the previous answer already saw it).
-- **Who can call.** Not the agent itself, not other bots (Discord member lookup), not `ignoreUserIds`. Who may talk to the agent in text is unchanged: `@agent` in the chat works as before.
+- **Who can call.** Only people in `allowUserIds` or with a role in `allowRoleIds` (or everyone with `allowEveryone: true`). Each speaker is checked with a Discord member lookup **before** their speech can reach the agent; a failed lookup means not allowed. Never the agent itself, other bots, or `ignoreUserIds`. Mirror the text access you give the agent: speaking in the room must not grant more than typing in the chat would. Text access is unchanged: `@agent` in the chat works as before.
+- **What reaches the agent.** By default only lines from people who may call (`contextFrom: "allowed"`); `"everyone"` adds other people's lines (never bots). The transcript is framed as untrusted data, with the caller's name and user id, and the agent is told to answer only the caller's marked line.
+- **Tools.** By default the turn runs with **no tools** (`tools: "none"`). `tools: "agent"` gives it the agent's normal tools; use that only when everyone allowed to call may use them, and keep the agent's own approval rules for consequential actions.
 - **Session.** By default each voice channel has its own agent session, `agent:<agentId>:voice-wake:<channelId>`, so it remembers earlier calls in that room. The run uses the agent's normal model, tools and memory.
 - **Transcript (optional).** `postTranscript: true` also posts every utterance (`**Name**: text`), collected for `transcriptFlushMs`. In listen-only rooms the Gateway logs no realtime transcript lines, so log-based relays have nothing to post there; this covers that.
 
@@ -70,6 +72,7 @@ Then make the room listen-only and choose the names:
         config: {
           channelIds: ["234567890123456789"],
           names: ["Mina", "Nina"],
+          allowRoleIds: ["345678901234567890"], // who may call by voice
         },
       },
     },
@@ -96,6 +99,11 @@ Only one occupancy-driven capture per server is possible (an OpenClaw limit), so
 | `names` | none | What people call the agent, with likely mishearings. **Off until set** |
 | `leadingCall` | off | `{ enabled, patterns, fillers }`: regular expressions tested **only at the start** of an utterance (after fillers such as ねえ / おーい), for a name the recognizer keeps getting wrong. E.g. `"^.{1,2}[なナ]ちゃん"` takes りなちゃん / ひなちゃん / いいなちゃん at the start as a call for ミナちゃん, but not 「昨日ひなちゃんと…」 |
 | `ignoreWords` | `[]` | Removed before matching (e.g. `"みなさん"` when a name is `"みな"`) |
+| `allowUserIds` | none | User ids allowed to call. **Off until this, `allowRoleIds` or `allowEveryone` is set** |
+| `allowRoleIds` | none | Role ids; members with one of them may call (member lookup, cached 10 min) |
+| `allowEveryone` | `false` | Every person in the room may call (bots never) |
+| `contextFrom` | `allowed` | Whose speech goes to the agent: `allowed` (people who may call) or `everyone` (every person heard) |
+| `tools` | `none` | `none`: the turn has no tools. `agent`: the agent's normal tools |
 | `ignoreUserIds` | `[]` | Speakers whose calls are ignored (bots and the agent are always ignored) |
 | `agentId` | `main` | The agent that answers |
 | `sessionKey` | `agent:{agentId}:voice-wake:{channelId}` | Agent session for the turn |

@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { UtteranceFollower, stateDbPath, sqliteReady } from "../src/store.js";
 import { WakeEngine, DEFAULTS } from "../src/wake.js";
-import { botCheck, botUserId } from "../src/discord.js";
+import { botUserId, memberLookup, speakerAuthorizer } from "../src/discord.js";
 import { workerPoster } from "../src/rest-worker.js";
 
 export const PLUGIN_ID = "voice-wake-text";
@@ -43,6 +43,9 @@ export function resolveConfig(pc = {}) {
   const c = { ...DEFAULTS, agentId: "main", accountId: undefined, pollMs: 1000, timeoutMs: 180_000, ...pc };
   c.channelIds = (c.channelIds || []).map(String).filter(Boolean);
   c.names = (c.names || []).map(String).filter((n) => n.trim());
+  c.allowUserIds = (c.allowUserIds || []).map(String).filter(Boolean);
+  c.allowRoleIds = (c.allowRoleIds || []).map(String).filter(Boolean);
+  c.tools = c.tools === "agent" ? "agent" : "none";
   return c;
 }
 
@@ -53,22 +56,28 @@ export async function startService(api, ctx, { openDb, fetchImpl = fetch } = {})
     log.warn("off: set channelIds and names");
     return { async stop() {} };
   }
+  if (!config.allowUserIds.length && !config.allowRoleIds.length && config.allowEveryone !== true) {
+    log.warn("off: set who may call (allowUserIds / allowRoleIds, or allowEveryone: true)");
+    return { async stop() {} };
+  }
   const cfg = () => hostConfig(api, ctx);
   const token = discordToken(cfg(), config.accountId);
   let selfId = config.botUserId;
   if (!selfId && token) selfId = await botUserId(token, fetchImpl).catch((e) => (log.warn(`could not read the bot's own id: ${e.message}`), undefined));
-  const isBot = token ? botCheck({ token, fetchImpl }) : null;
+  const member = token ? memberLookup({ token, fetchImpl }) : null;
+  if (!member) log.warn("no plain Discord token: cannot look up members, so only allowUserIds can call");
   const poster = createPoster(api, ctx, config, token);
 
   const engine = new WakeEngine({
     config,
     log,
-    isPerson: async (u) => {
-      if (!u.userId) return false;
-      if (selfId && u.userId === selfId) return false; // the agent itself
-      if (!isBot || !u.guildId) return true;
-      return (await isBot(u.guildId, u.userId)) !== true;
-    },
+    authorize: speakerAuthorizer({
+      selfId,
+      member,
+      allowUserIds: config.allowUserIds,
+      allowRoleIds: config.allowRoleIds,
+      allowEveryone: config.allowEveryone === true,
+    }),
     ask: (req) => askAgent(api, config, req, log),
     post: poster.post,
   });
@@ -108,6 +117,8 @@ export async function askAgent(api, config, { channelId, prompt, trigger }, log)
       sessionKey,
       message: prompt,
       deliver: false,
+      // Least privilege by default: no tools unless the operator opts in (tools: "agent").
+      ...(config.tools === "agent" ? {} : { disableTools: true }),
       idempotencyKey: `${PLUGIN_ID}:${trigger.key}`,
       ...(config.extraSystemPrompt ? { extraSystemPrompt: config.extraSystemPrompt } : {}),
     });
